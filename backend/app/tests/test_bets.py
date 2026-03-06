@@ -27,9 +27,7 @@ def test_place_deducts_balance(client, funded_headers, db):
     from app.models.user import User
     place(client, funded_headers, stake=100)
     user = db.query(User).filter(User.username == "testuser").first()
-    assert user.current_balance == 460.0   # 510 - 50 welcome already, then -100... recalc
-    # exact: welcome=10, deposit=500 → 510. place 100 → 410
-    # welcome=10 already, deposit 500 = 510, place 100 = 410
+    # welcome=10, deposit=500 → 510, place stake=100 → 410
     assert user.current_balance == 410.0
 
 def test_place_insufficient_balance(client, auth_headers):
