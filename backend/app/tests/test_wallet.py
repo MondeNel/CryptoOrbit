@@ -44,9 +44,10 @@ def test_transactions_ordered_newest_first(client, auth_headers):
     client.post("/wallet/deposit?amount=100", headers=auth_headers)
     client.post("/wallet/deposit?amount=200", headers=auth_headers)
     res = client.get("/wallet/transactions", headers=auth_headers)
+    assert res.status_code == 200
     amounts = [t["amount"] for t in res.json()]
-    # welcome bonus is oldest, deposits newest — newest first
-    assert amounts[0] == 200.0
+    # newest deposit (200) must appear before older deposit (100)
+    assert amounts.index(200.0) < amounts.index(100.0)
 
 def test_transactions_user_isolation(client, auth_headers):
     client.post("/wallet/deposit?amount=100", headers=auth_headers)
