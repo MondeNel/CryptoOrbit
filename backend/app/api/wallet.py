@@ -5,7 +5,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.bet import Transaction
 from app.schemas.bet import TransactionOut
-from sqlalchemy import desc
+
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -70,7 +70,7 @@ def transactions(
     return (
         db.query(Transaction)
         .filter(Transaction.user_id == user.id)
-        .order_by(desc(Transaction.created_at))
+        .order_by(Transaction.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
