@@ -498,3 +498,5 @@ MIT — free to use, modify, and distribute.
 ---
 
 *Built with 🪐 by OrbitBet Dev*
+
+*Disclaimer: This app was developed with the help of AI(Claude)*
