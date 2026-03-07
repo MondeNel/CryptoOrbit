@@ -4,9 +4,12 @@ import api from '../services/api.js';
 import { Audio } from '../lib/audio.js';
 
 export function useBetEngine() {
-  const betRef = useRef(null);
+  const betRef   = useRef(null);
+  const storeRef = useRef(null);
 
-  const store = useStore(s => ({
+  // storeRef.current is updated on every render, so setTimeout callbacks
+  // fired 3–6 seconds later always call live store functions, never stale closures.
+  storeRef.current = useStore(s => ({
     sym: s.sym, prices: s.prices, stake: s.stake, betting: s.betting, user: s.user,
     setBetting: s.setBetting, setDots: s.setDots, setPlanetStep: s.setPlanetStep,
     setOrbitActive: s.setOrbitActive, setShake: s.setShake, setCoreS: s.setCoreS,
@@ -14,16 +17,22 @@ export function useBetEngine() {
     setResBanner: s.setResBanner, setMilestone: s.setMilestone,
     deductBalance: s.deductBalance, setUserFromApi: s.setUserFromApi,
     appendRecent: s.appendRecent, loadTxns: s.loadTxns, loadHist: s.loadHist,
-    fireToast: s.fireToast,
+    fireToast: s.fireToast, tickPrices: s.tickPrices,
   }));
 
   const resolveRound = (round) => {
     if (!betRef.current) return;
-    const bet = betRef.current;
+
+    const store = storeRef.current;
+    const bet   = betRef.current;
+
+    // Tick the price in sync with each round resolution
+    store.tickPrices();
+
     const result = bet.outcomes[round];
     bet.results.push(result);
 
-    const nd = [null, null, null];
+    const nd   = [null, null, null];
     bet.results.forEach((r, i) => { nd[i] = r; });
     const wins = bet.results.filter(r => r === 'won').length;
 
@@ -31,10 +40,13 @@ export function useBetEngine() {
     if (isNM) {
       nd[round] = 'near';
       Audio.nearMiss();
-      store.setShake(true); store.setNmShow(true);
+      store.setShake(true);
+      store.setNmShow(true);
       setTimeout(() => {
-        store.setShake(false); store.setNmShow(false);
-        store.setDots(prev => { const d = [...prev]; d[round] = 'lost'; return d; });
+        const s = storeRef.current;
+        s.setShake(false);
+        s.setNmShow(false);
+        s.setDots(prev => { const d = [...prev]; d[round] = 'lost'; return d; });
       }, 850);
     }
 
@@ -52,38 +64,54 @@ export function useBetEngine() {
       const delay = isNM ? 950 : 600;
 
       setTimeout(async () => {
-        const roundStr = bet.results.map(r => r === 'won' ? 'win' : 'lose').join(',');
         try {
-          await api.post('/bets/resolve', { bet_id: bet.id, exit_price: store.prices[store.sym], round_results: roundStr });
-        } catch {}
+          const roundStr = bet.results.map(r => r === 'won' ? 'win' : 'lose').join(',');
 
-        try {
-          const { data } = await api.get('/auth/me');
-          store.setUserFromApi(data);
-          store.appendRecent(won ? 'won' : 'lost');
-          if (won && MILESTONE_MSGS[data.streak]) {
-            store.setMilestone({ show: true, text: MILESTONE_MSGS[data.streak] });
-            setTimeout(() => store.setMilestone({ show: false, text: '' }), 2800);
+          await api.post('/bets/resolve', {
+            bet_id: bet.id,
+            exit_price: storeRef.current.prices[storeRef.current.sym],
+            round_results: roundStr,
+          }).catch(() => {});
+
+          const { data } = await api.get('/auth/me').catch(() => ({ data: null }));
+          if (data) {
+            storeRef.current.setUserFromApi(data);
+            storeRef.current.appendRecent(won ? 'won' : 'lost');
+            if (won && MILESTONE_MSGS[data.streak]) {
+              storeRef.current.setMilestone({ show: true, text: MILESTONE_MSGS[data.streak] });
+              setTimeout(() => storeRef.current.setMilestone({ show: false, text: '' }), 2800);
+            }
           }
-        } catch {}
+        } catch (e) {
+          console.error('[useBetEngine] resolveRound API error:', e);
+        } finally {
+          const s = storeRef.current;
 
-        store.setCoreS(won ? 'win' : 'lose');
-        store.setR3S(won ? 'win' : 'lose');
-        store.setOrbitSt(won ? `▲ WIN · R${payout.toFixed(2)}` : '▼ LOSS');
-        store.setResBanner({
-          show: true, type: won ? 'win' : 'lose',
-          text: won
-            ? `◎ WIN! +R${(payout - bet.stake).toFixed(2)} · Payout R${payout.toFixed(2)}`
-            : `✕ LOSS · −R${bet.stake.toFixed(2)}`,
-        });
+          s.setCoreS(won ? 'win' : 'lose');
+          s.setR3S(won ? 'win' : 'lose');
+          s.setOrbitSt(won ? `▲ WIN · R${payout.toFixed(2)}` : '▼ LOSS');
+          s.setResBanner({
+            show: true,
+            type: won ? 'win' : 'lose',
+            text: won
+              ? `◎ WIN! +R${(payout - bet.stake).toFixed(2)} · Payout R${payout.toFixed(2)}`
+              : `✕ LOSS · −R${bet.stake.toFixed(2)}`,
+          });
 
-        await Promise.all([store.loadTxns(), store.loadHist()]);
-        setTimeout(() => { store.setBetting(false); store.setOrbitActive(false); betRef.current = null; }, 2200);
+          await Promise.all([s.loadTxns(), s.loadHist()]).catch(() => {});
+
+          setTimeout(() => {
+            storeRef.current.setBetting(false);
+            storeRef.current.setOrbitActive(false);
+            betRef.current = null;
+          }, 2200);
+        }
       }, delay);
     }
   };
 
   const placeBet = async (dir) => {
+    const store = storeRef.current;
     if (store.betting) return;
     if (store.stake > store.user.current_balance) { store.fireToast('Insufficient balance'); return; }
     if (store.stake < 10) { store.fireToast('Minimum stake is R10'); return; }
@@ -91,22 +119,35 @@ export function useBetEngine() {
 
     try {
       const { data: bet } = await api.post('/bets/place', {
-        symbol: store.sym, direction: dir, stake: store.stake, entry_price: store.prices[store.sym],
+        symbol: store.sym,
+        direction: dir,
+        stake: store.stake,
+        entry_price: store.prices[store.sym],
       });
 
-      const outcomes = ['won', Math.random() < 0.5 ? 'won' : 'lost', Math.random() < 0.5 ? 'won' : 'lost'];
+      const outcomes = [
+        Math.random() < 0.5 ? 'won' : 'lost',
+        Math.random() < 0.5 ? 'won' : 'lost',
+        Math.random() < 0.5 ? 'won' : 'lost',
+      ];
       betRef.current = { id: bet.id, dir, stake: store.stake, outcomes, results: [] };
+
       store.setBetting(true);
       store.setDots([null, null, null]);
       store.setPlanetStep(0);
       store.setOrbitActive(true);
-      store.setCoreS(''); store.setR3S(''); store.setNmShow(false);
+      store.setCoreS('');
+      store.setR3S('');
+      store.setNmShow(false);
       store.setResBanner({ show: false, type: '', text: '' });
       store.setOrbitSt('Round 1 of 3...');
       store.deductBalance(store.stake);
       setTimeout(() => resolveRound(0), 3200);
     } catch (e) {
-      store.fireToast(e.response?.data?.detail || 'Could not place bet');
+      storeRef.current.setBetting(false);
+      storeRef.current.setOrbitActive(false);
+      betRef.current = null;
+      storeRef.current.fireToast(e.response?.data?.detail || 'Could not place bet');
     }
   };
 
