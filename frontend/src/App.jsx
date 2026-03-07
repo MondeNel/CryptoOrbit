@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import useStore from './store/useStore.js';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import AppShell    from './components/layout/AppShell.jsx';
 import LoginPage    from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
@@ -373,19 +374,21 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AutoLogin>
-        <Routes>
-          <Route path="/login"    element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-            <Route index          element={<TradePage />} />
-            <Route path="wallet"  element={<WalletPage />} />
-            <Route path="history" element={<HistoryPage />} />
-            <Route path="profile" element={<ProfilePage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AutoLogin>
+      <ErrorBoundary>
+        <AutoLogin>
+          <Routes>
+            <Route path="/login"    element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+              <Route index          element={<TradePage />} />
+              <Route path="wallet"  element={<WalletPage />} />
+              <Route path="history" element={<HistoryPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AutoLogin>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
