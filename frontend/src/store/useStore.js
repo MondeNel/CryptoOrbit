@@ -4,7 +4,7 @@ import api from '../services/api.js';
 // ── Shared constants & helpers ───────────────────────────────────────────────
 export const MMAP        = { Crypto: ['BTC/USD', 'ETH/USD'], Forex: ['USD/EUR', 'USD/ZAR'] };
 export const BASE_PRICES = { 'BTC/USD': 67432.10, 'ETH/USD': 3241.55, 'USD/EUR': 0.9234, 'USD/ZAR': 18.654 };
-export const VOLS        = { 'BTC/USD': 0.0012, 'ETH/USD': 0.0015, 'USD/EUR': 0.0004, 'USD/ZAR': 0.0008 };
+export const VOLS = { 'BTC/USD': 0.0003, 'ETH/USD': 0.0004, 'USD/EUR': 0.0001, 'USD/ZAR': 0.0002 };
 export const MILESTONE_MSGS = { 3: '🔥 3 in a row!', 5: '💥 5 streak — unstoppable!', 10: '🚀 10 streak — legendary!' };
 export const TXICON      = { deposit: '💳', withdraw: '↑', bet_win: '◎', bet_loss: '✕', free: '🎁' };
 
@@ -72,15 +72,45 @@ const useStore = create((set, get) => ({
     try { const { data } = await api.get('/auth/me'); get().setUserFromApi(data); } catch {}
   },
 
-  // PRICES
-  prices: { ...BASE_PRICES }, prevPrices: { ...BASE_PRICES }, spinTick: 0,
-  tickPrices() {
-    set(s => {
-      const n = { ...s.prices };
-      Object.keys(n).forEach(sym => { n[sym] = Math.max(0.0001, n[sym] + n[sym] * VOLS[sym] * (Math.random() * 2 - 1)); });
-      return { prices: n, prevPrices: { ...s.prices }, spinTick: s.spinTick + 1 };
+// PRICES
+prices: { ...BASE_PRICES }, prevPrices: { ...BASE_PRICES }, spinTick: 0,
+_realPrices: { ...BASE_PRICES }, // last known real prices from API
+
+async fetchRealPrices() {
+  try {
+    const [cryptoRes, fxRes] = await Promise.all([
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd'),
+      fetch('https://open.er-api.com/v6/latest/USD'),
+    ]);
+    const cryptoData = await cryptoRes.json();
+    const fxData     = await fxRes.json();
+
+    const updated = {};
+    if (cryptoData?.bitcoin?.usd)  updated['BTC/USD'] = cryptoData.bitcoin.usd;
+    if (cryptoData?.ethereum?.usd) updated['ETH/USD'] = cryptoData.ethereum.usd;
+    if (fxData?.rates?.EUR)        updated['USD/EUR']  = fxData.rates.EUR;
+    if (fxData?.rates?.ZAR)        updated['USD/ZAR']  = fxData.rates.ZAR;
+
+    // Update the real price anchor
+    set(s => ({ _realPrices: { ...s._realPrices, ...updated } }));
+  } catch {}
+},
+
+tickPrices() {
+  // Micro-tick: nudge current display price slightly around the real anchor
+  set(s => {
+    const n = { ...s.prices };
+    Object.keys(n).forEach(sym => {
+      const real = s._realPrices[sym] || n[sym];
+      // Small random walk, but drift back toward real price
+      const drift    = (real - n[sym]) * 0.15; // pull 15% back toward real
+      const noise    = real * VOLS[sym] * (Math.random() * 2 - 1);
+      n[sym] = Math.max(0.0001, n[sym] + drift + noise);
     });
-  },
+    return { prices: n, prevPrices: { ...s.prices }, spinTick: s.spinTick + 1 };
+  });
+},
+
 
   // MARKET / SYMBOL
   market: 'Crypto', sym: 'BTC/USD',
@@ -96,12 +126,20 @@ const useStore = create((set, get) => ({
   orbitActive: false, shake: false, coreS: '', r3S: '',
   nmShow: false, orbitSt: '', resBanner: { show:false, type:'', text:'' },
   milestone: { show:false, text:'' },
-  setBetting: v => set({ betting: v }), setDots: v => set({ dots: v }),
-  setPlanetStep: v => set({ planetStep: v }), setOrbitActive: v => set({ orbitActive: v }),
-  setShake: v => set({ shake: v }), setCoreS: v => set({ coreS: v }),
-  setR3S: v => set({ r3S: v }), setNmShow: v => set({ nmShow: v }),
-  setOrbitSt: v => set({ orbitSt: v }), setResBanner: v => set({ resBanner: v }),
-  setMilestone: v => set({ milestone: v }),
+  setBetting:     v => set({ betting: v }),
+  // ✅ FIX: setDots now supports both plain arrays AND updater functions.
+  // Previously `v => set({ dots: v })` would store the function itself as `dots`
+  // when called with an updater, causing `dots.filter is not a function` crash.
+  setDots:        v => set(s => ({ dots: typeof v === 'function' ? v(s.dots) : v })),
+  setPlanetStep:  v => set({ planetStep: v }),
+  setOrbitActive: v => set({ orbitActive: v }),
+  setShake:       v => set({ shake: v }),
+  setCoreS:       v => set({ coreS: v }),
+  setR3S:         v => set({ r3S: v }),
+  setNmShow:      v => set({ nmShow: v }),
+  setOrbitSt:     v => set({ orbitSt: v }),
+  setResBanner:   v => set({ resBanner: v }),
+  setMilestone:   v => set({ milestone: v }),
   resetOrbit() {
     set({ dots:[null,null,null], planetStep:0, orbitActive:false, shake:false, coreS:'', r3S:'', nmShow:false, orbitSt:'', resBanner:{show:false,type:'',text:''} });
   },
