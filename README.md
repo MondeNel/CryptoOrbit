@@ -498,7 +498,7 @@ MIT — free to use, modify, and distribute.
 ---
 
 ## Auto-build script
-
+ 
 ```
 ./run.sh          # build & start everything (default)
 ./run.sh down     # stop all services
@@ -506,6 +506,31 @@ MIT — free to use, modify, and distribute.
 ./run.sh logs     # stream all logs
 ./run.sh logs backend   # stream just backend logs
 ./run.sh clean    # remove everything including volumes
+
+```
+
+```
+
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate environment
+source venv/bin/activate      # macOS / Linux
+venv\Scripts\activate         # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start PostgreSQL (Docker)
+docker run -d 
+
+docker compose ps
+- checking if the containers are running
+
+# Start FastAPI server
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ```
 
