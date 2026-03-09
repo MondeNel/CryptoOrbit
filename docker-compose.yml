@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 
 
@@ -70,9 +70,9 @@ services:
 
       CORS_ORIGINS:                  http://localhost,http://localhost:80
 
-    expose:
+    ports:
 
-      - "8000"
+      - "8000:8000"
 
     healthcheck:
 

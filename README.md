@@ -497,6 +497,18 @@ MIT — free to use, modify, and distribute.
 
 ---
 
+## Auto-build script
+
+```
+./run.sh          # build & start everything (default)
+./run.sh down     # stop all services
+./run.sh restart  # restart without rebuilding
+./run.sh logs     # stream all logs
+./run.sh logs backend   # stream just backend logs
+./run.sh clean    # remove everything including volumes
+
+```
+
 *Built with 🪐 by OrbitBet Dev*
 
 *Disclaimer: This app was developed with the help of AI(Claude)*
